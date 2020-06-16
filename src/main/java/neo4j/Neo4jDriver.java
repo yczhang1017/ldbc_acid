@@ -441,15 +441,28 @@ public class Neo4jDriver extends TestDriver<Transaction, Map<String, Object>, St
     public Map<String, Object> ws1(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
+        System.out.println("tId " + parameters.get("transactionId") + ", forumId " + parameters.get("forumId"));
         final StatementResult result = tt.run("MATCH (f:Forum {id: $forumId})-[:HAS_MODERATOR]->(p:Person {id: $personId})\n" +
                 "RETURN f, p", parameters);
 
         if (!result.hasNext()) {
+
+            System.out.println("tId " + parameters.get("transactionId") + ", forumId " + parameters.get("forumId") + " SELECTED FOR CHANGE");
+            final StatementResult result2 = tt.run("MATCH (f:Forum)-[h:HAS_MODERATOR]->(:Person)\n" +
+                    "WITH f, count(h) AS modCount\n" +
+                    "RETURN\n" +
+                    "  f.id AS forumId,\n" +
+                    "  modCount");
+            while (result2.hasNext()) System.out.println("tId " + parameters.get("transactionId") + ", forumId " + parameters.get("forumId") + "   " + result2.next());
+//            System.out.print("XXXXXX ");
+
             sleep((Long) parameters.get("sleepTime"));
             tt.run("MATCH (f:Forum {id: $forumId}),\n" +
                     "  (p:Person {id: $personId})\n" +
                     "CREATE (f)-[:HAS_MODERATOR]->(p)", parameters);
             commitTransaction(tt);
+            System.out.println("tId " + parameters.get("transactionId") + ", forumId " + parameters.get("forumId") + "   MADE IT");
+
         }
 
         return ImmutableMap.of();
@@ -458,8 +471,9 @@ public class Neo4jDriver extends TestDriver<Transaction, Map<String, Object>, St
     @Override
     public Map<String, Object> ws2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
-        final StatementResult result = tt.run("MATCH (f:Forum)-[:HAS_MODERATOR]->(p:Person)\n" +
-                "WITH f, count(p) AS modCount\n" +
+
+        final StatementResult result = tt.run("MATCH (f:Forum)-[h:HAS_MODERATOR]->(:Person)\n" +
+                "WITH f, count(h) AS modCount\n" +
                 "WHERE modCount > 1\n" +
                 "RETURN\n" +
                 "  f.id AS forumId,\n" +

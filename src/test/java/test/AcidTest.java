@@ -313,22 +313,27 @@ public abstract class AcidTest<TTestDriver extends TestDriver> {
     @Test
     public void wsTest() throws Exception {
         testDriver.wsInit();
-        final int wc = 10;
+        final int wc = 20;
 
         List<TransactionThread<Map<String, Object>, Map<String, Object>>> clients = new ArrayList<>();
         Random random = new Random();
         int numPersons = 4;
-        int numForums = 3;
+        int numForums = 1;
         for (int i = 0; i < wc; i++) {
             long forumId = random.nextInt(numForums) + 1;
             long personId = random.nextInt(numPersons) + 1;
-            clients.add(new TransactionThread<>(i, testDriver::ws1, ImmutableMap.of("forumId", forumId, "personId", personId, "sleepTime", 250L)));
+            clients.add(new TransactionThread<>(i, testDriver::ws1, ImmutableMap.of("transactionId", i, "forumId", forumId, "personId", personId, "sleepTime", 250L)));
         }
 
         final List<Future<Map<String, Object>>> futures = executorService.invokeAll(clients);
+        System.out.println();
+
         for (Future<Map<String, Object>> future : futures) {
-            future.get();
+            try {future.get();} catch (Exception e) {
+                System.out.print("x");
+            }
         }
+        System.out.println();
 
         Map<String, Object> results = testDriver.ws2(ImmutableMap.of());
         System.out.println(results);
