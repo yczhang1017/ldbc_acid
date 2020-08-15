@@ -406,7 +406,6 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Res
     public Map<String, Object> lu1(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
         tt.run("MATCH (p1:Person {id: 1})\n" +
-                "CREATE (p1)-[:KNOWS]->(p2)\n" +
                 "SET p1.numFriends = p1.numFriends + 1\n" +
                 "RETURN p1.numFriends\n");
         commitTransaction(tt);
@@ -417,14 +416,10 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Res
     public Map<String, Object> lu2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
         final Result result = tt.run("MATCH (p:Person {id: $personId})\n" +
-                "OPTIONAL MATCH (p)-[k:KNOWS]->()\n" +
-                "WITH p, count(k) AS numKnowsEdges\n" +
-                "RETURN numKnowsEdges,\n" +
-                "       p.numFriends AS numFriendsProp\n",parameters);
+                "RETURN p.numFriends AS numFriendsProp\n",parameters);
         final Record record = result.next();
-        long numKnowsEdges = record.get("numKnowsEdges").asLong();
         long numFriends = record.get("numFriendsProp").asLong();
-        return ImmutableMap.of("numKnowsEdges", numKnowsEdges, "numFriendsProp", numFriends);
+        return ImmutableMap.of("numFriendsProp", numFriends);
 
     }
 
