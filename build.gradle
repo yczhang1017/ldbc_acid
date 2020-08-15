@@ -22,7 +22,8 @@ dependencies {
     compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
 
     // Neo4j driver
-    compile group: 'org.neo4j.driver', name: 'neo4j-java-driver', version: neo4jDriverVersion
+//    compile group: 'org.neo4j.driver', name: 'neo4j-java-driver', version: neo4jDriverVersion
+    compile group: 'org.neo4j.driver', name: 'neo4j-java-driver', version: '4.1.1'
 
     // JanusGraph
     compile(group: 'org.janusgraph', name: 'janusgraph-core',      version: janusgraphVersion) {

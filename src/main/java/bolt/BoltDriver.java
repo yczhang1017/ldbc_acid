@@ -2,13 +2,7 @@ package bolt;
 
 import com.google.common.collect.ImmutableMap;
 import driver.TestDriver;
-import org.neo4j.driver.v1.AuthTokens;
-import org.neo4j.driver.v1.Driver;
-import org.neo4j.driver.v1.GraphDatabase;
-import org.neo4j.driver.v1.Record;
-import org.neo4j.driver.v1.StatementResult;
-import org.neo4j.driver.v1.Transaction;
-import org.neo4j.driver.v1.Value;
+import org.neo4j.driver.*;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -17,7 +11,7 @@ import java.util.Map;
 import java.util.Random;
 
 // Driver for Bolt-compatible graph databases (Memgraph and Neo4j)
-public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, StatementResult> {
+public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Result> {
 
     protected Driver driver;
 
@@ -45,18 +39,18 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
 
     @Override
     public void commitTransaction(Transaction tt) {
-        tt.success();
+        tt.commit();
         tt.close();
     }
 
     @Override
     public void abortTransaction(Transaction tt) {
-        tt.failure();
+        tt.rollback();
         tt.close();
     }
 
     @Override
-    public StatementResult runQuery(Transaction tt, String querySpecification, Map<String, Object> queryParameters) {
+    public Result runQuery(Transaction tt, String querySpecification, Map<String, Object> queryParameters) {
         return tt.run(querySpecification, queryParameters);
     }
 
@@ -94,7 +88,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
         final Transaction tt = startTransaction();
 
         tt.run("MATCH (p1:Person {id: $person1Id}) SET p1.emails = p1.emails + [$newEmail]", parameters);
-        final StatementResult result = tt.run("MATCH (p2:Person {id: $person2Id}) RETURN p2", parameters);
+        final Result result = tt.run("MATCH (p2:Person {id: $person2Id}) RETURN p2", parameters);
         if (result.hasNext()) {
             abortTransaction(tt);
         } else {
@@ -107,7 +101,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> atomicityCheck() {
         final Transaction tt = startTransaction();
 
-        StatementResult result = tt.run("MATCH (p:Person)\n" +
+        Result result = tt.run("MATCH (p:Person)\n" +
                 "RETURN count(p) AS numPersons, count(p.name) AS numNames, sum(size(p.emails)) AS numEmails");
         Record record = result.next();
         final long numPersons = record.get("numPersons").asLong();
@@ -141,7 +135,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> g0check(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        StatementResult result = tt.run("MATCH (p1:Person {id: $person1Id})-[k:KNOWS]->(p2:Person {id: $person2Id})\n" +
+        Result result = tt.run("MATCH (p1:Person {id: $person1Id})-[k:KNOWS]->(p2:Person {id: $person2Id})\n" +
                 "RETURN\n" +
                 "  p1.versionHistory AS p1VersionHistory,\n" +
                 "  k.versionHistory  AS kVersionHistory,\n" +
@@ -166,9 +160,9 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
         final Transaction tt = startTransaction();
 
         // we cannot pass p as a parameter so we pass its internal ID instead
-        final StatementResult result = tt.run("MATCH (p:Person {id: $personId})\n" +
+        final Result result = tt.run("MATCH (p:Person {id: $personId})\n" +
                 "RETURN ID(p) AS internalPId", parameters);
-        if (!result.hasNext()) throw new IllegalStateException("G1a1 StatementResult empty");
+        if (!result.hasNext()) throw new IllegalStateException("G1a1 Result empty");
         final Value internalPId = result.next().get("internalPId");
 
         sleep((Long) parameters.get("sleepTime"));
@@ -187,8 +181,8 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> g1a2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        final StatementResult result = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS pVersion", parameters);
-        if (!result.hasNext()) throw new IllegalStateException("G1a T2 StatementResult empty");
+        final Result result = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS pVersion", parameters);
+        if (!result.hasNext()) throw new IllegalStateException("G1a T2 Result empty");
         final long pVersion = result.next().get("pVersion").asLong();
 
         return ImmutableMap.of("pVersion", pVersion);
@@ -217,8 +211,8 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> g1b2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        final StatementResult result = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS pVersion", parameters);
-        if (!result.hasNext()) throw new IllegalStateException("G1b T2 StatementResult empty");
+        final Result result = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS pVersion", parameters);
+        if (!result.hasNext()) throw new IllegalStateException("G1b T2 Result empty");
         final long pVersion = result.next().get("pVersion").asLong();
 
         return ImmutableMap.of("pVersion", pVersion);
@@ -235,7 +229,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> g1c(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        StatementResult result = tt.run("MATCH (p1:Person {id: $person1Id})\n" +
+        Result result = tt.run("MATCH (p1:Person {id: $person1Id})\n" +
                 "SET p1.version = $transactionId\n" +
                 "WITH count(*) AS dummy\n" +
                 "MATCH (p2:Person {id: $person2Id})\n" +
@@ -267,13 +261,13 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> imp2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        final StatementResult result1 = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS firstRead", parameters);
+        final Result result1 = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS firstRead", parameters);
         if (!result1.hasNext()) throw new IllegalStateException("IMP result1 empty");
         final long firstRead = result1.next().get("firstRead").asLong();
 
         sleep((Long) parameters.get("sleepTime"));
 
-        final StatementResult result2 = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS secondRead", parameters);
+        final Result result2 = tt.run("MATCH (p:Person {id: $personId}) RETURN p.version AS secondRead", parameters);
         if (!result2.hasNext()) throw new IllegalStateException("IMP result2 empty");
         final long secondRead = result2.next().get("secondRead").asLong();
 
@@ -301,13 +295,13 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> pmp2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        final StatementResult result1 = tt.run("MATCH (po1:Post {id: $postId})<-[:LIKES]-(pe1:Person) RETURN count(pe1) AS firstRead", parameters);
+        final Result result1 = tt.run("MATCH (po1:Post {id: $postId})<-[:LIKES]-(pe1:Person) RETURN count(pe1) AS firstRead", parameters);
         if (!result1.hasNext()) throw new IllegalStateException("PMP result1 empty");
         final long firstRead = result1.next().get("firstRead").asLong();
 
         sleep((Long) parameters.get("sleepTime"));
 
-        final StatementResult result2 = tt.run("MATCH (po2:Post {id: $postId})<-[:LIKES]-(pe2:Person) RETURN count(pe2) AS secondRead", parameters);
+        final Result result2 = tt.run("MATCH (po2:Post {id: $postId})<-[:LIKES]-(pe2:Person) RETURN count(pe2) AS secondRead", parameters);
         if (!result2.hasNext()) throw new IllegalStateException("PMP result2 empty");
         final long secondRead = result2.next().get("secondRead").asLong();
 
@@ -346,13 +340,13 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     @Override
     public Map<String, Object> otv2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
-        final StatementResult result1 = tt.run("MATCH (p1:Person {id: $personId})-[:KNOWS]->(p2)-[:KNOWS]->(p3)-[:KNOWS]->(p4)-[:KNOWS]->(p1) RETURN [p1.version, p2.version, p3.version, p4.version] AS firstRead", parameters);
+        final Result result1 = tt.run("MATCH (p1:Person {id: $personId})-[:KNOWS]->(p2)-[:KNOWS]->(p3)-[:KNOWS]->(p4)-[:KNOWS]->(p1) RETURN [p1.version, p2.version, p3.version, p4.version] AS firstRead", parameters);
         if (!result1.hasNext()) throw new IllegalStateException("OTV2 result1 empty");
         final List<Object> firstRead = result1.next().get("firstRead").asList();
 
         sleep((Long) parameters.get("sleepTime"));
 
-        final StatementResult result2 = tt.run("MATCH (p1:Person {id: $personId})-[:KNOWS]->(p2)-[:KNOWS]->(p3)-[:KNOWS]->(p4)-[:KNOWS]->(p1) RETURN [p1.version, p2.version, p3.version, p4.version] AS secondRead", parameters);
+        final Result result2 = tt.run("MATCH (p1:Person {id: $personId})-[:KNOWS]->(p2)-[:KNOWS]->(p3)-[:KNOWS]->(p4)-[:KNOWS]->(p1) RETURN [p1.version, p2.version, p3.version, p4.version] AS secondRead", parameters);
         if (!result2.hasNext()) throw new IllegalStateException("OTV2 result2 empty");
         final List<Object> secondRead = result2.next().get("secondRead").asList();
 
@@ -386,13 +380,13 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> fr2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        final StatementResult result1 = tt.run("MATCH path1 = (n1:Person {id: $personId})-[:KNOWS*..4]->(n1) RETURN extract(p IN nodes(path1) | p.version) AS firstRead", parameters);
+        final Result result1 = tt.run("MATCH path1 = (n1:Person {id: $personId})-[:KNOWS*..4]->(n1) RETURN [p IN nodes(path1) | p.version] AS firstRead", parameters);
         if (!result1.hasNext()) throw new IllegalStateException("FR2 result1 empty");
         final List<Object> firstRead = result1.next().get("firstRead").asList();
 
         sleep((Long) parameters.get("sleepTime"));
 
-        final StatementResult result2 = tt.run("MATCH path1 = (n1:Person {id: $personId})-[:KNOWS*..4]->(n1) RETURN extract(p IN nodes(path1) | p.version) AS secondRead", parameters);
+        final Result result2 = tt.run("MATCH path1 = (n1:Person {id: $personId})-[:KNOWS*..4]->(n1) RETURN [p IN nodes(path1) | p.version] AS secondRead", parameters);
         if (!result2.hasNext()) throw new IllegalStateException("FR2 result2 empty");
         final List<Object> secondRead = result2.next().get("secondRead").asList();
 
@@ -422,7 +416,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     @Override
     public Map<String, Object> lu2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
-        final StatementResult result = tt.run("MATCH (p:Person {id: $personId})\n" +
+        final Result result = tt.run("MATCH (p:Person {id: $personId})\n" +
                 "OPTIONAL MATCH (p)-[k:KNOWS]->()\n" +
                 "WITH p, count(k) AS numKnowsEdges\n" +
                 "RETURN numKnowsEdges,\n" +
@@ -451,8 +445,8 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> ws1(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
 
-        // if (p1.value+p2.value < 0) then abort --> if (p1.value+p2.value >= 0) then do the update
-        final StatementResult result = tt.run(
+        // if (p1.value+p2.value < 100) then abort --> if (p1.value+p2.value >= 100) then do the update
+        final Result result = tt.run(
                 "MATCH (p1:Person {id: $person1Id}), (p2:Person {id: $person2Id})\n" +
                 "WHERE p1.value + p2.value >= 0\n" +
                 "RETURN p1, p2", parameters);
@@ -477,7 +471,7 @@ public class BoltDriver extends TestDriver<Transaction, Map<String, Object>, Sta
     public Map<String, Object> ws2(Map<String, Object> parameters) {
         final Transaction tt = startTransaction();
         // we select pairs of persons using (id, id+1) pairs
-        final StatementResult result = tt.run("MATCH (p1:Person), (p2:Person {id: p1.id+1})\n" +
+        final Result result = tt.run("MATCH (p1:Person), (p2:Person {id: p1.id+1})\n" +
                 "WHERE p1.value + p2.value <= 0\n"+
                 "RETURN p1.id AS p1id, p1.value AS p1value, p2.id AS p2id, p2.value AS p2value");
 
